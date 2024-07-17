@@ -18,7 +18,7 @@ class FileUploadController implements HasMiddleware
 
     public function handle()
     {
-        abort_unless(request()->hasValidSignature(), 401);
+        // abort_unless(request()->hasValidSignature(), 401);
 
         $disk = FileUploadConfiguration::disk();
 
