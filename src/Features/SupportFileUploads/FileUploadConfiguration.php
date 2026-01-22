@@ -9,19 +9,22 @@ class FileUploadConfiguration
 {
     public static function storage()
     {
+        $disk = static::disk();
+
         if (app()->runningUnitTests()) {
             // We want to "fake" the first time in a test run, but not again because
-            // ::fake() whipes the storage directory every time its called.
-            rescue(function () {
+            // Storage::fake() wipes the storage directory every time its called.
+            rescue(
                 // If the storage disk is not found (meaning it's the first time),
                 // this will throw an error and trip the second callback.
-                return Storage::disk(static::disk());
-            }, function () {
-                return Storage::fake(static::disk());
-            });
+                fn() => Storage::disk($disk),
+                fn() => Storage::fake($disk),
+                // swallows the error that is thrown on the first try
+                report: false
+            );
         }
 
-        return Storage::disk(static::disk());
+        return Storage::disk($disk);
     }
 
     public static function disk()
@@ -120,5 +123,22 @@ class FileUploadConfiguration
     public static function maxUploadTime()
     {
         return config('livewire.temporary_file_upload.max_upload_time') ?: 5;
+    }
+
+    public static function storeTemporaryFile($file, $disk)
+    {
+        $filename = TemporaryUploadedFile::generateHashName($file);
+        $metaFilename = $filename . '.json';
+        
+        Storage::disk($disk)->put('/'.static::path($metaFilename), json_encode([
+            'name' => $file->getClientOriginalName(),
+            'type' => $file->getMimeType(),
+            'size' => $file->getSize(),
+            'hash' => $file->hashName(),
+        ]));
+
+        return $file->storeAs('/'.static::path(), $filename, [
+            'disk' => $disk
+        ]);
     }
 }

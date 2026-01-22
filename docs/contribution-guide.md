@@ -36,24 +36,26 @@ npm install
 npm run build
 
 # Link all Alpine packages locally
-cd alpine/packages/alpinejs && npm link
-cd alpine/packages/anchor && npm link
-cd alpine/packages/collapse && npm link
-cd alpine/packages/csp && npm link
-cd alpine/packages/docs && npm link
-cd alpine/packages/focus && npm link
-cd alpine/packages/history && npm link
-cd alpine/packages/intersect && npm link
-cd alpine/packages/mask && npm link
-cd alpine/packages/morph && npm link
-cd alpine/packages/navigate && npm link
-cd alpine/packages/persist && npm link
+cd packages/alpinejs && npm link && cd ../../
+cd packages/anchor && npm link && cd ../../
+cd packages/collapse && npm link && cd ../../
+cd packages/csp && npm link && cd ../../
+cd packages/docs && npm link && cd ../../
+cd packages/focus && npm link && cd ../../
+cd packages/history && npm link && cd ../../
+cd packages/intersect && npm link && cd ../../
+cd packages/mask && npm link && cd ../../
+cd packages/morph && npm link && cd ../../
+cd packages/navigate && npm link && cd ../../
+cd packages/persist && npm link && cd ../../
+cd packages/sort && npm link && cd ../../
+cd packages/ui && npm link && cd ../../
 
 # Switch the working directory back to livewire
 cd ../livewire
 
 # Link all packages
-npm link alpinejs @alpinejs/anchor @alpinejs/collapse @alpinejs/csp @alpinejs/docs @alpinejs/focus @alpinejs/history @alpinejs/intersect @alpinejs/mask @alpinejs/morph @alpinejs/navigate @alpinejs/persist
+npm link alpinejs @alpinejs/anchor @alpinejs/collapse @alpinejs/csp @alpinejs/docs @alpinejs/focus @alpinejs/history @alpinejs/intersect @alpinejs/mask @alpinejs/morph @alpinejs/navigate @alpinejs/persist @alpinejs/sort @alpinejs/ui
 
 # Build Livewire
 npm run build
@@ -99,8 +101,7 @@ use Tests\TestCase;
 
 class UnitTest extends TestCase
 {
-    /** @test */
-    public function livewire_can_run_action(): void
+    public function test_livewire_can_run_action(): void
     {
        // ...
     }
@@ -114,8 +115,7 @@ use Tests\BrowserTestCase;
 
 class BrowserTest extends BrowserTestCase
 {
-    /** @test */
-    public function livewire_can_run_action()
+    public function test_livewire_can_run_action()
     {
         // ...
     }
@@ -125,7 +125,17 @@ class BrowserTest extends BrowserTestCase
 > [!tip] Not sure how to write tests?
 > You can learn a lot by explore existing Unit and Browser tests to learn how tests are written. Even copying and pasting an existing test is a great starting point for writing your own test.
 
-#### 3. Preparing your pull request branch
+#### 3. Running the tests
+Before submitting your pull request, make sure your test passes. You can do so by running one of the following commands:
+
+```shell
+vendor/bin/phpunit --filter "test_can_make_method_a_computed" # To run a specific test
+vendor/bin/phpunit # To run all tests
+```
+
+By default, browser tests will run in headed mode. If you want to run them in headless mode, you can create a `.env` file in the root of the Livewire repository and add `DUSK_HEADLESS_DISABLED=false`.
+
+#### 4. Preparing your pull request branch
 Once you have completed your feature or failing test, it's time to submit your Pull Request (PR) to the Livewire repository. First, ensure that you commit your changes to a separate branch (avoid using `main`). To create a new branch, you can use the `git` command:
 
 ```shell
@@ -150,7 +160,7 @@ To github.com:Username/livewire.git
  * [new branch]        my-feature -> my-feature
 ```
 
-#### 4. Submitting your pull request
+#### 5. Submitting your pull request
 We're almost there! Open your web browser and navigate to your forked Livewire repository (`https://github.com/<your-username>/livewire`). In the center of your screen, you will see a new notification: "**my-feature had recent pushes 1 minute ago**" along with a button that says "**Compare & pull request**." Click the button to open the pull request form.
 
 In the form, provide a title that describes your pull request and then proceed to the description section. The text area already contains a predefined template. Try to answer every question:

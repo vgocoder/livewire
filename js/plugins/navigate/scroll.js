@@ -3,7 +3,7 @@ export function storeScrollInformationInHtmlBeforeNavigatingAway() {
     document.body.setAttribute('data-scroll-x', document.body.scrollLeft)
     document.body.setAttribute('data-scroll-y', document.body.scrollTop)
 
-    document.querySelectorAll(['[x-navigate\\:scroll]', '[wire\\:scroll]']).forEach(el => {
+    document.querySelectorAll(['[x-navigate\\:scroll]', '[wire\\:navigate\\:scroll]']).forEach(el => {
         el.setAttribute('data-scroll-x', el.scrollLeft)
         el.setAttribute('data-scroll-y', el.scrollTop)
     })
@@ -25,8 +25,10 @@ export function restoreScrollPositionOrScrollToTop() {
     }
 
     queueMicrotask(() => {
-        scroll(document.body)
+        queueMicrotask(() => { // Double microtask here to make sure scrolling restoration is the LAST thing to happen. (Even after Alpine's x-init functions)...
+            scroll(document.body)
 
-        document.querySelectorAll(['[x-navigate\\:scroll]', '[wire\\:scroll]']).forEach(scroll)
+            document.querySelectorAll(['[x-navigate\\:scroll]', '[wire\\:navigate\\:scroll]']).forEach(scroll)
+        })
     })
 }

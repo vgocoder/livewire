@@ -1,5 +1,5 @@
-import { toggleBooleanStateDirective } from './shared'
 import { directive, getDirectives } from '@/directives'
+import { toggleBooleanStateDirective } from './shared'
 import { dataGet, WeakBag } from '@/utils'
 import { on } from '@/hooks'
 
@@ -16,8 +16,6 @@ on('commit', ({ component, respond }) => {
 directive('dirty', ({ el, directive, component }) => {
     let targets = dirtyTargets(el)
 
-    let dirty = Alpine.reactive({ state: false })
-
     let oldIsDirty = false
 
     let initialDisplay = el.style.display
@@ -33,17 +31,7 @@ directive('dirty', ({ el, directive, component }) => {
     Alpine.effect(() => {
         let isDirty = false
 
-        if (targets.length === 0) {
-            isDirty = JSON.stringify(component.canonical) !== JSON.stringify(component.reactive)
-        } else {
-            for (let i = 0; i < targets.length; i++) {
-                if (isDirty) break;
-
-                let target = targets[i]
-
-                isDirty = JSON.stringify(dataGet(component.canonical, target)) !== JSON.stringify(dataGet(component.reactive, target))
-            }
-        }
+        isDirty = checkDirty(component, targets.length === 0 ? undefined : targets)
 
         if (oldIsDirty !== isDirty) {
             refreshDirtyState(isDirty)
@@ -52,6 +40,26 @@ directive('dirty', ({ el, directive, component }) => {
         oldIsDirty = isDirty
     })
 })
+
+export function checkDirty(component, targets) {
+    let isDirty = false
+
+    if (targets === undefined) {
+        isDirty = JSON.stringify(component.canonical) !== JSON.stringify(component.reactive)
+    } else if (Array.isArray(targets)) {
+        for (let i = 0; i < targets.length; i++) {
+            if (isDirty) break;
+
+            let target = targets[i]
+
+            isDirty = JSON.stringify(dataGet(component.canonical, target)) !== JSON.stringify(dataGet(component.reactive, target))
+        }
+    } else {
+        isDirty = JSON.stringify(dataGet(component.canonical, targets)) !== JSON.stringify(dataGet(component.reactive, targets))
+    }
+
+    return isDirty
+}
 
 function dirtyTargets(el) {
     let directives = getDirectives(el)

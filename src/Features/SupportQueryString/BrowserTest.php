@@ -43,6 +43,8 @@ class BrowserTest extends \Tests\BrowserTestCase
         ->assertQueryStringMissing('tableFilters')
         ->type('@filter_1', 'test')
         ->waitForLivewire()
+        // Wait for the changes to be applied...
+        ->pause(5)
         ->assertScript(
             '(new URLSearchParams(window.location.search)).toString()',
             'tableFilters%5Bfilter_1%5D%5Bvalue%5D=test'
@@ -51,6 +53,90 @@ class BrowserTest extends \Tests\BrowserTestCase
         ->assertInputValue('@filter_1', 'test')
         ;
     }
+
+    public function test_keep_option_does_not_duplicate_url_query_string_for_array_parameters_on_page_load()
+    {
+        Livewire::withQueryParams([
+            'filters' => [
+                'startDate' => '2024-01-01',
+                'endDate' => '2024-09-05',
+            ]
+        ])->visit([
+            new class extends Component
+            {
+                #[BaseUrl(keep: true)]
+                public array $filters = [
+                    'startDate' => '',
+                    'endDate' => '',
+                ];
+
+                public function render()
+                {
+                    return <<<'HTML'
+                    <div>
+                        <input type="text" dusk="startDate" wire:model.live="filters.startDate" />
+                        <input type="text" dusk="endDate" wire:model.live="filters.endDate" />
+                    </div>
+                    HTML;
+                }
+            },
+        ])
+            ->assertScript('return window.location.search', '?filters[startDate]=2024-01-01&filters[endDate]=2024-09-05');
+    }
+
+    public function test_does_not_duplicate_url_query_string_for_array_parameters_on_page_load()
+    {
+        Livewire::withQueryParams([
+            'filters' => [
+                'startDate' => '2024-01-01',
+                'endDate' => '2024-09-05',
+            ]
+        ])->visit([
+            new class extends Component
+            {
+                #[BaseUrl]
+                public array $filters = [
+                    'startDate' => '',
+                    'endDate' => '',
+                ];
+
+                public function render()
+                {
+                    return <<<'HTML'
+                    <div>
+                        <input type="text" dusk="startDate" wire:model.live="filters.startDate" />
+                        <input type="text" dusk="endDate" wire:model.live="filters.endDate" />
+                    </div>
+                    HTML;
+                }
+            },
+        ])
+            ->assertScript('return window.location.search', '?filters[startDate]=2024-01-01&filters[endDate]=2024-09-05');
+    }
+
+    public function test_keep_option_does_not_duplicate_url_query_string_for_string_parameter_on_page_load()
+    {
+        Livewire::withQueryParams([
+            'date' => '2024-01-01',
+        ])->visit([
+            new class extends Component
+            {
+                #[BaseUrl(keep: true)]
+                public $date = '';
+
+                public function render()
+                {
+                    return <<<'HTML'
+                    <div>
+                        <input type="text" dusk="date" wire:model.live="date" />
+                    </div>
+                    HTML;
+                }
+            },
+        ])
+            ->assertScript('return window.location.search', '?date=2024-01-01');
+    }
+
 
     public function can_encode_url_containing_spaces_and_commas()
     {
@@ -115,6 +201,8 @@ class BrowserTest extends \Tests\BrowserTestCase
             ->type('@exclamation', 'foo!')
             ->type('@parentheses', 'foo(bar)')
             ->type('@asterisk', 'foo*')
+            // Wait for the changes to be applied...
+            ->pause(5)
             ->assertScript('return !! window.location.search.match(/exclamation=foo\!/)')
             ->assertScript('return !! window.location.search.match(/parentheses=foo\(bar\)/)')
             ->assertScript('return !! window.location.search.match(/asterisk=foo\*/)')
@@ -177,10 +265,10 @@ class BrowserTest extends \Tests\BrowserTestCase
                             @switch($filter1)
                               @case('')
                                 <div>All</div>
-                              @case('some') 
+                              @case('some')
                                 <div>Some</div>
                               @break
-                            @endswitch   
+                            @endswitch
                         </div>
                         <select dusk="filter2" wire:model.change="filter2">
                             <option value="all">All</option>
@@ -191,10 +279,10 @@ class BrowserTest extends \Tests\BrowserTestCase
                             @switch($filter2)
                               @case('all')
                                 <div>All</div>
-                              @case('some') 
+                              @case('some')
                                 <div>Some</div>
                               @break
-                            @endswitch   
+                            @endswitch
                         </div>
                     </div>
                     HTML;
@@ -390,6 +478,91 @@ class BrowserTest extends \Tests\BrowserTestCase
         ])
             ->assertQueryStringMissing('foo')
             ->assertSeeIn('@output', '1')
+            ->waitForLivewire()->click('@button')
+            ->assertQueryStringHas('foo', '2')
+            ->assertSeeIn('@output', '2')
+            ->refresh()
+            ->assertQueryStringHas('foo', '2')
+            ->assertSeeIn('@output', '2')
+        ;
+    }
+
+    public function test_can_use_url_on_string_backed_enum_object_properties_with_initial_invalid_value_on_nullable()
+    {
+        Livewire::withQueryParams(['foo' => 'bar'])
+            ->visit([
+            new class extends Component
+            {
+                #[Url(keep: true, nullable: true)]
+                public ?StringBackedEnumForUrlTesting $foo;
+
+                public function change()
+                {
+                    $this->foo = StringBackedEnumForUrlTesting::Second;
+                }
+
+                public function unsetFoo()
+                {
+                    $this->foo = null;
+                }
+
+                public function render()
+                {
+                    return <<<'HTML'
+                    <div>
+                        <button wire:click="change" dusk="button">Change</button>
+                        <h1 dusk="output">{{ $foo }}</h1>
+                        <button wire:click="unsetFoo" dusk="unsetButton">Unset foo</button>
+                    </div>
+                    HTML;
+                }
+            },
+        ])
+            ->assertQueryStringHas('foo', '')
+            ->assertSee('foo', null)
+            ->waitForLivewire()->click('@button')
+            ->assertQueryStringHas('foo', 'second')
+            ->assertSeeIn('@output', 'second')
+            ->refresh()
+            ->assertQueryStringHas('foo', 'second')
+            ->assertSeeIn('@output', 'second')
+        ;
+    }
+
+
+    public function test_can_use_url_on_integer_backed_enum_object_properties_with_initial_invalid_value_on_nullable()
+    {
+        Livewire::withQueryParams(['foo' => 5])
+            ->visit([
+            new class extends Component
+            {
+                #[Url(keep: true, nullable: true)]
+                public ?IntegerBackedEnumForUrlTesting $foo;
+
+                public function change()
+                {
+                    $this->foo = IntegerBackedEnumForUrlTesting::Second;
+                }
+
+                public function unsetFoo()
+                {
+                    $this->foo = null;
+                }
+
+                public function render()
+                {
+                    return <<<'HTML'
+                    <div>
+                        <button wire:click="change" dusk="button">Change</button>
+                        <h1 dusk="output">{{ $foo }}</h1>
+                        <button wire:click="unsetFoo" dusk="unsetButton">Unset foo</button>
+                    </div>
+                    HTML;
+                }
+            },
+        ])
+            ->assertQueryStringHas('foo', '')
+            ->assertSee('foo', null)
             ->waitForLivewire()->click('@button')
             ->assertQueryStringHas('foo', '2')
             ->assertSeeIn('@output', '2')
@@ -707,10 +880,10 @@ class BrowserTest extends \Tests\BrowserTestCase
             ->assertQueryStringHas('foo', 'bar')
             ->waitForLivewire()->click('@unsetButton')
             ->assertSeeIn('@output', 'null')
-            ->assertQueryStringHas('foo', '')
+            ->assertQueryStringMissing('foo')
             ->refresh()
             ->assertSeeIn('@output', 'null')
-            ->assertQueryStringHas('foo', '');
+            ->assertQueryStringMissing('foo');
     }
 
     public function test_can_handle_empty_querystring_value_as_null_or_empty_string_based_on_typehinting_of_property()
@@ -773,16 +946,16 @@ class BrowserTest extends \Tests\BrowserTestCase
             ->assertSeeIn('@output-nullableFoo', 'null')
             ->assertSeeIn('@output-notNullableFoo', '\'\'')
             ->assertSeeIn('@output-notTypehintingFoo', 'null')
-            ->assertQueryStringHas('nullableFoo', '')
+            ->assertQueryStringMissing('nullableFoo')
             ->assertQueryStringHas('notNullableFoo', '')
-            ->assertQueryStringHas('notTypehintingFoo', '')
+            ->assertQueryStringMissing('notTypehintingFoo')
             ->refresh()
             ->assertSeeIn('@output-nullableFoo', 'null')
             ->assertSeeIn('@output-notNullableFoo', '\'\'')
-            ->assertSeeIn('@output-notTypehintingFoo', '\'\'')
-            ->assertQueryStringHas('nullableFoo', '')
+            ->assertSeeIn('@output-notTypehintingFoo', 'null')
+            ->assertQueryStringMissing('nullableFoo')
             ->assertQueryStringHas('notNullableFoo', '')
-            ->assertQueryStringHas('notTypehintingFoo', '');
+            ->assertQueryStringMissing('notTypehintingFoo');
     }
 
     public function test_can_set_the_correct_query_string_parameter_when_multiple_instances_of_the_same_component_are_used()
@@ -828,7 +1001,7 @@ class BrowserTest extends \Tests\BrowserTestCase
 
     public function test_cannot_inject_js_through_query_string()
     {
-        $this->tweakApplication(function() {
+        $this->beforeServingApplication(function() {
             app('livewire')->component('foo', new class extends Component {
                 #[Url]
                 public $foo = 'bar';
@@ -870,33 +1043,39 @@ class BrowserTest extends \Tests\BrowserTestCase
         });
     }
 
-    public function test_it_handles_query_string_params_without_values()
+    public function test_it_handles_query_string_params_without_values_and_does_not_throw_a_console_error()
     {
-        $id = 'a'.str()->random(10);
+        $componentClass = new class extends Component
+        {
+            #[Url]
+            public $foo;
+
+            public function setFoo()
+            {
+                $this->foo = 'bar';
+            }
+
+            public function render()
+            {
+                return <<<'HTML'
+                <div>
+                    <button wire:click="setFoo" dusk="setButton">Set foo</button>
+                    <span dusk="output">@js($foo)</span>
+                </div>
+                HTML;
+            }
+        };
+
+        $id = 'a'.substr(md5(str()->beforeLast($componentClass::class, '$')), 0, 8);
 
         DuskTestable::createBrowser($id, [
-            $id => new class extends Component
-            {
-                #[Url]
-                public $foo;
-
-                public function setFoo()
-                {
-                    $this->foo = 'bar';
-                }
-
-                public function render()
-                {
-                    return <<<'HTML'
-                    <div>
-                        <button wire:click="setFoo" dusk="setButton">Set foo</button>
-                        <span dusk="output">@js($foo)</span>
-                    </div>
-                    HTML;
-                }
-            }
+            $id => $componentClass
         ])
+        // It's essential for this test that `flag`, in the query string below, is set
+        // but has no value. That is why class and ID are manually set up above...
         ->visit('/livewire-dusk/'.$id.'?flag')
+
+        // Now just test the component still functions without any console errors...
         ->assertQueryStringMissing('foo')
         ->waitForLivewire()->click('@setButton')
         ->assertSeeIn('@output', '\'bar\'')
@@ -905,6 +1084,131 @@ class BrowserTest extends \Tests\BrowserTestCase
         ->assertQueryStringHas('foo', 'bar');
     }
 
+    public function test_it_handles_query_string_encoded_keys()
+    {
+        Livewire::withQueryParams([
+            'foo' => ['bar' => 'baz'],
+        ])
+            ->visit([
+                new class extends Component
+                {
+                    #[Url]
+                    public $foo;
+
+                    public function render()
+                    {
+                        return <<<'HTML'
+                        <div>
+                        </div>
+                        HTML;
+                    }
+                }
+            ])
+            ->assertScript('return window.location.search', '?foo[bar]=baz');
+    }
+
+    public function test_it_skips_query_string_encoded_keys_not_tracked_by_livewire()
+    {
+        Livewire::withQueryParams([
+            'foo' => ['bar' => 'baz'],
+            'bob' => ['lob' => 'law'],
+        ])
+            ->visit([
+                new class extends Component
+                {
+                    #[Url]
+                    public $foo;
+
+                    public function render()
+                    {
+                        return <<<'HTML'
+                        <div>
+                        </div>
+                        HTML;
+                    }
+                }
+            ])
+            ->assertScript('return window.location.search', '?foo[bar]=baz&bob%5Blob%5D=law');
+    }
+
+    public function test_except_does_remove_value_from_query_string_when_loaded_with_value_then_changed_to_except_value()
+    {
+        Livewire::withQueryParams([
+            'shown' => true,
+        ])
+            ->visit([
+                new class extends Component
+                {
+                    #[Url(except: false)]
+                    public bool $shown = false;
+
+                    public function hide(): void
+                    {
+                        $this->shown = false;
+                    }
+
+                    public function render()
+                    {
+                        return <<<'HTML'
+                        <div>
+                            <button wire:click="hide" dusk="hideButton">Hide</button>
+                        </div>
+                        HTML;
+                    }
+                }
+            ])
+            ->assertScript('return window.location.search', '?shown=true')
+            ->waitForLivewire()->click('@hideButton')
+            ->assertScript('return window.location.search', '');
+    }
+
+    public function test_it_batches_query_string_initialisation_into_a_single_call_to_the_browser_history_api()
+    {
+        Livewire::visit([
+            new class extends Component
+            {
+                public function render()
+                {
+                    return <<<'HTML'
+                    <div>
+                        @foreach(range(1, 100) as $i)
+                            <livewire:child />
+                        @endforeach
+                    </div>
+                    @push('scripts')
+                        <script>
+                            let countOfReplaceStateCalls = 0;
+
+                            let originalReplaceState = window.history.replaceState.bind(window.history);
+
+                            window.history.replaceState = function(state, title, url) {
+                                countOfReplaceStateCalls++;
+                                originalReplaceState(state, title, url);
+                            };
+                        </script>
+                    @endpush
+                    HTML;
+                }
+            },
+            'child' => new class extends Component
+            {
+                #[BaseUrl]
+                public $foo = 'bar';
+
+                public function render()
+                {
+                    return <<<'HTML'
+                    <div>
+                        Child
+                    </div>
+                    HTML;
+                }
+            },
+        ])
+            ->waitForLivewireToLoad()
+            ->assertScript('return countOfReplaceStateCalls', 1)
+        ;
+    }
 }
 
 class FormObject extends \Livewire\Form

@@ -1,4 +1,6 @@
 import { isObjecty } from "@/utils"
+import historyCoordinator from "./coordinator"
+import { unwrap } from "./utils"
 
 export default function history(Alpine) {
     Alpine.magic('queryString', (el, { interceptor }) =>  {
@@ -41,11 +43,11 @@ export default function history(Alpine) {
 export function track(name, initialSeedValue, alwaysShow = false, except = null) {
     let { has, get, set, remove } = queryStringUtils()
 
-    let url = new URL(window.location.href)
+    let url = historyCoordinator.getUrl()
     let isInitiallyPresentInUrl = has(url, name)
     let initialValue = isInitiallyPresentInUrl ? get(url, name) : initialSeedValue
     let initialValueMemo = JSON.stringify(initialValue)
-    let exceptValueMemo = [false, null, undefined].includes(except) ? initialSeedValue : JSON.stringify(except)
+    let exceptValueMemo = JSON.stringify(except)
 
     let hasReturnedToInitialValue = (newValue) => JSON.stringify(newValue) === initialValueMemo
     let hasReturnedToExceptValue = (newValue) =>  JSON.stringify(newValue) === exceptValueMemo
@@ -59,7 +61,7 @@ export function track(name, initialSeedValue, alwaysShow = false, except = null)
     let update = (strategy, newValue) => {
         if (lock) return
 
-        let url = new URL(window.location.href)
+        let url = historyCoordinator.getUrl()
 
         // This block of code is what needs to be changed for this failing test to pass:
         if (! alwaysShow && ! isInitiallyPresentInUrl && hasReturnedToInitialValue(newValue)) {
@@ -137,29 +139,11 @@ export function track(name, initialSeedValue, alwaysShow = false, except = null)
 }
 
 function replace(url, key, object) {
-    let state = window.history.state || {}
-
-    if (! state.alpine) state.alpine = {}
-
-    state.alpine[key] = unwrap(object)
-
-    window.history.replaceState(state, '', url.toString())
+    historyCoordinator.replaceState(url, { [key]: object })
 }
 
 function push(url, key, object) {
-    let state = window.history.state || {}
-
-    if (! state.alpine) state.alpine = {}
-
-    state = { alpine: {...state.alpine, ...{[key]: unwrap(object)}} }
-
-    window.history.pushState(state, '', url.toString())
-}
-
-function unwrap(object) {
-    if (object === undefined) return undefined
-
-    return JSON.parse(JSON.stringify(object))
+    historyCoordinator.pushState(url, { [key]: object })
 }
 
 function queryStringUtils() {
@@ -169,7 +153,7 @@ function queryStringUtils() {
 
             if (! search) return false
 
-            let data = fromQueryString(search)
+            let data = fromQueryString(search, key)
 
             return Object.keys(data).includes(key)
         },
@@ -178,12 +162,12 @@ function queryStringUtils() {
 
             if (! search) return false
 
-            let data = fromQueryString(search)
+            let data = fromQueryString(search, key)
 
             return data[key]
         },
         set(url, key, value) {
-            let data = fromQueryString(url.search)
+            let data = fromQueryString(url.search, key)
 
             data[key] = stripNulls(unwrap(value))
 
@@ -192,7 +176,7 @@ function queryStringUtils() {
             return url
         },
         remove(url, key) {
-            let data = fromQueryString(url.search)
+            let data = fromQueryString(url.search, key)
 
             delete data[key]
 
@@ -244,7 +228,7 @@ function toQueryString(data) {
 
 // This function converts bracketed query string notation back to JS data...
 // "items[0][0]=foo" -> { items: [['foo']] }
-function fromQueryString(search) {
+function fromQueryString(search, queryKey) {
     search = search.replace('?', '')
 
     if (search === '') return {}
@@ -277,11 +261,15 @@ function fromQueryString(search) {
 
         value = decodeURIComponent(value.replaceAll('+', '%20'))
 
-        if (! key.includes('[')) {
+        let decodedKey = decodeURIComponent(key)
+
+        let shouldBeHandledAsArray = decodedKey.includes('[') && decodedKey.startsWith(queryKey)
+
+        if (!shouldBeHandledAsArray) {
             data[key] = value
         } else {
             // Convert to dot notation because it's easier...
-            let dotNotatedKey = key.replaceAll('[', '.').replaceAll(']', '')
+            let dotNotatedKey = decodedKey.replaceAll('[', '.').replaceAll(']', '')
 
             insertDotNotatedValueIntoData(dotNotatedKey, value, data)
         }

@@ -7,18 +7,15 @@ However, behind the scenes, file downloads are handled differently than in a sta
 
 Triggering a file download in Livewire is as simple as returning a standard Laravel download response.
 
-Below is an example of a `ShowInvoice` component that contains a "Download" button to download the invoice PDF:
+Below is an example of a `show-invoice` component that contains a "Download" button to download the invoice PDF:
 
 ```php
-<?php
-
-namespace App\Livewire;
+<?php // resources/views/components/⚡show-invoice.blade.php
 
 use Livewire\Component;
 use App\Models\Invoice;
 
-class ShowInvoice extends Component
-{
+new class extends Component {
     public Invoice $invoice;
 
     public function mount(Invoice $invoice)
@@ -32,12 +29,7 @@ class ShowInvoice extends Component
             $this->invoice->file_path, 'invoice.pdf'
         );
     }
-
-    public function render()
-    {
-        return view('livewire.show-invoice');
-    }
-}
+};
 ```
 
 ```blade
@@ -80,8 +72,7 @@ Livewire also provides a `->assertFileDownloaded()` method to easily test that a
 ```php
 use App\Models\Invoice;
 
-/** @test */
-public function can_download_invoice()
+public function test_can_download_invoice()
 {
     $invoice = Invoice::factory();
 
@@ -96,8 +87,7 @@ You can also test to ensure a file was not downloaded using the `->assertNoFileD
 ```php
 use App\Models\Invoice;
 
-/** @test */
-public function does_not_download_invoice_if_unauthorised()
+public function test_does_not_download_invoice_if_unauthorised()
 {
     $invoice = Invoice::factory();
 
