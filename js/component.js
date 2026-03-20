@@ -1,4 +1,4 @@
-import { dataSet, deepClone, diff, diffAndConsolidate, extractData} from '@/utils'
+import { dataSet, deepClone, diff, diffAndConsolidate, diffAndPatchRecursive, extractData} from '@/utils'
 import { generateWireObject } from '@/$wire'
 import { findComponentByEl, findComponent, hasComponent } from '@/store'
 import { trigger } from '@/hooks'
@@ -91,15 +91,10 @@ export class Component {
 
         let newData = extractData(deepClone(snapshot.data))
 
-        Object.entries(dirty).forEach(([key, value]) => {
-            let rootKey = key.split('.')[0]
-            this.reactive[rootKey] = newData[rootKey]
-        })
-        // Object.entries(this.ephemeral).forEach(([key, value]) => {
-        //     if (! deeplyEqual(this.ephemeral[key], newData[key])) {
-        //         this.reactive[key] = newData[key]
-        //     }
-        // })
+        // Diff old vs new and patch differences onto the reactive proxy. Walks
+        // the trees directly, avoiding dot-notated paths which break when
+        // object keys contain dots.
+        diffAndPatchRecursive(updatedOldCanonical, newData, this.reactive)
 
         return dirty
     }
@@ -217,6 +212,8 @@ export class Component {
 
     getDeepChildrenWithBindings(callback) {
         this.getDeepChildren(child => {
+            if (child.isLazy && ! child.hasBeenLazyLoaded) return
+
             if (child.hasReactiveProps() || child.hasWireModelableBindings()) {
                 callback(child)
             }
@@ -299,6 +296,19 @@ export class Component {
 
     getJsActions() {
         return this.jsActions
+    }
+
+    // Called by JSON.stringify() on both $wire (via the Proxy) and the
+    // Component instance directly. Without this, stringifying a Component
+    // throws a circular reference error (el <-> component). Tools like
+    // Laravel Boost trigger this when logging objects to the browser console.
+    toJSON() {
+        return {
+            id: this.id,
+            name: this.name,
+            key: this.key,
+            data: Object.fromEntries(Object.entries(this.ephemeral)),
+        }
     }
 
     addCleanup(cleanup) {

@@ -114,9 +114,11 @@ class CacheManager
         $classPath = $this->getClassPath($sourcePath);
 
         $this->ensureCacheDirectoryExists();
-        File::ensureDirectoryExists($this->cacheDirectory . '/classes');
+        File::makeDirectory($this->cacheDirectory . '/classes', 0777, true, true);
 
-        File::put($classPath, $contents);
+        // Use atomic write to prevent race conditions when multiple
+        // concurrent requests try to compile the same component.
+        File::replace($classPath, $contents);
     }
 
     public function writeViewFile(string $sourcePath, string $contents): void
@@ -124,9 +126,9 @@ class CacheManager
         $viewPath = $this->getViewPath($sourcePath);
 
         $this->ensureCacheDirectoryExists();
-        File::ensureDirectoryExists($this->cacheDirectory . '/views');
+        File::makeDirectory($this->cacheDirectory . '/views', 0777, true, true);
 
-        File::put($viewPath, $contents);
+        File::replace($viewPath, $contents);
 
         $this->mutateFileModificationTime($viewPath);
     }
@@ -136,9 +138,9 @@ class CacheManager
         $scriptPath = $this->getScriptPath($sourcePath);
 
         $this->ensureCacheDirectoryExists();
-        File::ensureDirectoryExists($this->cacheDirectory . '/scripts');
+        File::makeDirectory($this->cacheDirectory . '/scripts', 0777, true, true);
 
-        File::put($scriptPath, $contents);
+        File::replace($scriptPath, $contents);
     }
 
     public function writeStyleFile(string $sourcePath, string $contents): void
@@ -146,9 +148,9 @@ class CacheManager
         $stylePath = $this->getStylePath($sourcePath);
 
         $this->ensureCacheDirectoryExists();
-        File::ensureDirectoryExists($this->cacheDirectory . '/styles');
+        File::makeDirectory($this->cacheDirectory . '/styles', 0777, true, true);
 
-        File::put($stylePath, $contents);
+        File::replace($stylePath, $contents);
     }
 
     public function writeGlobalStyleFile(string $sourcePath, string $contents): void
@@ -156,9 +158,9 @@ class CacheManager
         $stylePath = $this->getGlobalStylePath($sourcePath);
 
         $this->ensureCacheDirectoryExists();
-        File::ensureDirectoryExists($this->cacheDirectory . '/styles');
+        File::makeDirectory($this->cacheDirectory . '/styles', 0777, true, true);
 
-        File::put($stylePath, $contents);
+        File::replace($stylePath, $contents);
     }
 
     public function writePlaceholderFile(string $sourcePath, string $contents): void
@@ -166,9 +168,9 @@ class CacheManager
         $placeholderPath = $this->getPlaceholderPath($sourcePath);
 
         $this->ensureCacheDirectoryExists();
-        File::ensureDirectoryExists($this->cacheDirectory . '/placeholders');
+        File::makeDirectory($this->cacheDirectory . '/placeholders', 0777, true, true);
 
-        File::put($placeholderPath, $contents);
+        File::replace($placeholderPath, $contents);
 
         $this->mutateFileModificationTime($placeholderPath);
     }
@@ -178,9 +180,9 @@ class CacheManager
         $viewPath = $this->getViewPath($sourcePath);
 
         $this->ensureCacheDirectoryExists();
-        File::ensureDirectoryExists($this->cacheDirectory . '/views');
+        File::makeDirectory($this->cacheDirectory . '/views', 0777, true, true);
 
-        File::put($viewPath, $contents);
+        File::replace($viewPath, $contents);
 
         $this->mutateFileModificationTime($viewPath);
     }
@@ -194,16 +196,16 @@ class CacheManager
 
     protected function ensureCacheDirectoryExists(): void
     {
-        // Same approach as Blade's Compiler::ensureCompiledDirectoryExists()
-        // @see \Illuminate\View\Compilers\Compiler::ensureCompiledDirectoryExists()
-        if (! is_dir($this->cacheDirectory)) {
-            File::makeDirectory($this->cacheDirectory, 0777, true, true);
-        }
+        File::makeDirectory($this->cacheDirectory, 0777, true, true);
 
         $gitignorePath = $this->cacheDirectory . '/.gitignore';
 
         if (! file_exists($gitignorePath)) {
-            File::put($gitignorePath, "*\n!.gitignore");
+            try {
+                File::put($gitignorePath, "*\n!.gitignore");
+            } catch (\Throwable) {
+                // Non-critical, ignore if another process created it
+            }
         }
     }
 

@@ -113,12 +113,48 @@ export function dataSet(object, key, value) {
 
     let firstSegment = segments.shift()
     let restOfSegments = segments.join('.')
+    let nextSegment = segments[0]
 
     if (object[firstSegment] === undefined) {
         object[firstSegment] = {}
     }
 
+    // If we're about to set a numeric key that would create null gaps, convert to object.
+    // This prevents JavaScript from filling intermediate indices with nulls
+    // (e.g., arr[1000] = true creates 1000 null entries in a JS array).
+    // We only convert when the key would create gaps (key > length), not when appending.
+    if (isArray(object[firstSegment]) && isNumeric(nextSegment) && parseInt(nextSegment) > object[firstSegment].length) {
+        object[firstSegment] = { ...object[firstSegment] }
+    }
+
     dataSet(object[firstSegment], restOfSegments, value)
+}
+
+function isNumeric(subject) {
+    return ! isNaN(parseInt(subject))
+}
+
+/**
+ * Delete a property from an object with support for dot-notation and bracket-notation.
+ */
+export function dataDelete(object, key) {
+    let segments = parsePathSegments(key)
+
+    if (segments.length === 1) {
+        if (Array.isArray(object)) {
+            object.splice(segments[0], 1)
+        } else {
+            delete object[segments[0]]
+        }
+        return
+    }
+
+    let firstSegment = segments.shift()
+    let restOfSegments = segments.join('.')
+
+    if (object[firstSegment] !== undefined) {
+        dataDelete(object[firstSegment], restOfSegments)
+    }
 }
 
 /**
@@ -143,6 +179,13 @@ export function diff(left, right, diffs = {}, path = '') {
 
     // We now know both are objects...
     let leftKeys = Object.keys(left)
+    let rightKeys = Object.keys(right)
+
+    // Did the key order change? (includes insertions that shift existing keys)
+    if (isObject(left) && leftKeys.some((key, i) => key !== rightKeys[i])) {
+        diffs[path] = right
+        return diffs
+    }
 
     // Recursively diff the object's properties...
     Object.entries(right).forEach(([key, value]) => {
@@ -246,6 +289,14 @@ function diffRecursive(left, right, path, diffs, rootLeft, rootRight) {
         return { changed: true, consolidated: true }
     }
 
+    // Did the key order change?
+    if (isObject(left) && leftKeys.length === rightKeys.length && leftKeys.some((key, i) => key !== rightKeys[i])) {
+        if (path !== '') {
+            diffs[path] = dataGet(rootRight, path)
+            return { changed: true, consolidated: true }
+        }
+    }
+
     // Check if all keys are the same (no additions/removals)
     let keysMatch = leftKeys.every(k => rightKeys.includes(k))
 
@@ -284,7 +335,57 @@ function diffRecursive(left, right, path, diffs, rootLeft, rootRight) {
     Object.assign(diffs, childDiffs)
 
     // If any child was consolidated, bubble that up to prevent further consolidation
-    return { changed: changedCount > 0, consolidated: consolidatedCount > 0 }
+    // Also bubble up convertedToObject to prevent parent consolidation from
+    // JSON-serializing arrays with non-numeric keys (which JSON.stringify ignores)
+    return { changed: changedCount > 0, consolidated: consolidatedCount > 0 || convertedToObject }
+}
+
+/**
+ * Diff two object trees (left = old, right = new) and patch the differences
+ * onto a target object. Walks the trees directly via object key access,
+ * avoiding dot-notated path strings which break when object keys contain dots.
+ */
+export function diffAndPatchRecursive(left, right, target) {
+    let leftKeys = new Set(Object.keys(left || {}))
+    let rightKeys = Object.keys(right)
+
+    // If existing keys shifted position in an object (e.g. a key was inserted
+    // in the middle), we can't patch key-by-key because new keys would be
+    // appended at the end. Replace all keys on the target to preserve order.
+    if (!isArray(target) && [...leftKeys].some((key, i) => key !== rightKeys[i])) {
+        for (let key of Object.keys(target)) delete target[key]
+        for (let key of rightKeys) target[key] = right[key]
+        return
+    }
+
+    rightKeys.forEach(key => {
+        leftKeys.delete(key)
+
+        if (deeplyEqual(left?.[key], right[key])) return
+
+        if (isObjecty(left?.[key]) && isObjecty(right[key]) && isObjecty(target[key])
+            && isArray(right[key]) === isArray(target[key])) {
+            diffAndPatchRecursive(left[key], right[key], target[key])
+        } else {
+            target[key] = right[key]
+        }
+    })
+
+    // Handle removals — keys present in left but not in right.
+    // Sort in reverse numeric order so array splice indices stay valid.
+    let removedKeys = [...leftKeys]
+
+    removedKeys.sort((a, b) => {
+        let aNum = parseInt(a) || 0
+        let bNum = parseInt(b) || 0
+        return bNum - aNum
+    }).forEach(key => {
+        if (isArray(target)) {
+            target.splice(parseInt(key), 1)
+        } else {
+            delete target[key]
+        }
+    })
 }
 
 /**
